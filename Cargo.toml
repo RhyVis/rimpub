@@ -2,6 +2,7 @@
 name = "rimpub"
 description = "A simple CLI tool for publishing RimWorld mods"
 authors = ["Rhynia <rhynia_v@outlook.com>"]
+license = "GPL-3.0"
 version = "0.2.0"
 edition = "2024"
 
