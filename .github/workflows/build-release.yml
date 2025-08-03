@@ -4,6 +4,9 @@ on:
   push:
     branches: [main]
 
+permissions:
+  contents: write
+
 env:
   CARGO_TERM_COLOR: always
 
@@ -137,8 +140,6 @@ jobs:
         if: steps.check_tag.outputs.exists == 'false'
         id: create_release
         uses: ncipollo/release-action@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           tag: ${{ steps.get_version.outputs.tag }}
           name: Release ${{ steps.get_version.outputs.tag }}
@@ -159,36 +160,8 @@ jobs:
           draft: false
           prerelease: false
           allowUpdates: true
-
-      - name: Upload Windows Release Asset
-        if: steps.check_tag.outputs.exists == 'false'
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: ./rimpub-windows-x64-${{ steps.get_version.outputs.version }}.zip
-          asset_name: rimpub-windows-x64-${{ steps.get_version.outputs.version }}.zip
-          asset_content_type: application/zip
-
-      - name: Upload Linux Release Asset
-        if: steps.check_tag.outputs.exists == 'false'
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: ./rimpub-linux-x64-${{ steps.get_version.outputs.version }}.tar.gz
-          asset_name: rimpub-linux-x64-${{ steps.get_version.outputs.version }}.tar.gz
-          asset_content_type: application/gzip
-
-      - name: Upload SHA256 Checksums
-        if: steps.check_tag.outputs.exists == 'false'
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: ./checksums.txt
-          asset_name: checksums.txt
-          asset_content_type: text/plain
+          artifacts: |
+            rimpub-windows-x64-${{ steps.get_version.outputs.version }}.zip
+            rimpub-linux-x64-${{ steps.get_version.outputs.version }}.tar.gz
+            checksums.txt
+          token: ${{ secrets.GITHUB_TOKEN }}
