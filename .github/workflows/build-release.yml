@@ -136,12 +136,12 @@ jobs:
       - name: Create Release
         if: steps.check_tag.outputs.exists == 'false'
         id: create_release
-        uses: actions/create-release@v1
+        uses: ncipollo/release-action@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          tag_name: ${{ steps.get_version.outputs.tag }}
-          release_name: Release ${{ steps.get_version.outputs.tag }}
+          tag: ${{ steps.get_version.outputs.tag }}
+          name: Release ${{ steps.get_version.outputs.tag }}
           body: |
             ## Changes in this Release
 
@@ -158,6 +158,7 @@ jobs:
             You can verify the integrity of downloaded files using the SHA256 checksums provided in the checksums.txt file.
           draft: false
           prerelease: false
+          allowUpdates: true
 
       - name: Upload Windows Release Asset
         if: steps.check_tag.outputs.exists == 'false'
