@@ -47,11 +47,15 @@ pub struct ConfigSetArgs {
 pub struct Config {
     #[serde(default)]
     pub path_mods: Option<PathBuf>,
+
+    #[serde(default)]
+    pub no_ask: bool,
 }
 
 static CONFIG: OnceLock<RwLock<Config>> = OnceLock::new();
 const CONFIG_FILE_NAME: &str = "Config.toml";
 const FIELD_PATH_MODS: &str = "path_mods";
+const FIELD_NO_ASK: &str = "no_ask";
 
 impl Config {
     pub fn init() -> Result<()> {
@@ -75,6 +79,7 @@ impl Config {
                     warn!("'path_mods' not set");
                     None
                 }),
+            FIELD_NO_ASK => Some(config.no_ask.to_string()),
             _ => {
                 warn!("Unexpected key {key} provided");
                 None
@@ -91,7 +96,22 @@ impl Config {
     pub fn set(key: &str, value: &str) -> Result<()> {
         match key.to_lowercase().as_str() {
             FIELD_PATH_MODS => Self::write(|c| {
-                c.path_mods = Some(PathBuf::from(value));
+                let value = PathBuf::from(value.trim());
+                c.path_mods = Some(value);
+                info!(
+                    "Set 'path_mods' to {}",
+                    c.path_mods.as_ref().unwrap().display()
+                );
+                Ok(())
+            }),
+            FIELD_NO_ASK => Self::write(|c| {
+                c.no_ask = value.parse().map_err(|_| {
+                    anyhow!(
+                        "Invalid value for 'no_ask': expected a boolean, got '{}'",
+                        value
+                    )
+                })?;
+                info!("Set 'no_ask' to {}", c.no_ask);
                 Ok(())
             }),
             _ => {

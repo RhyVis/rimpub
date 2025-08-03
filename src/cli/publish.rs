@@ -31,6 +31,7 @@ pub struct PublishConf {
 
 impl PublishArgs {
     pub fn run(&self) -> Result<()> {
+        let config_global = Config::get_obj();
         let working_directory = std::env::current_dir()?;
         info!("Working directory: {}", working_directory.display());
 
@@ -75,9 +76,11 @@ impl PublishArgs {
         info!("Target directory: {}", target_path.display());
 
         if target_path.exists() {
-            if !confirm_deletion(&target_path)? {
-                info!("Operation cancelled by user");
-                return Ok(());
+            if !config_global.no_ask {
+                if !confirm_deletion(&target_path)? {
+                    info!("Operation cancelled by user");
+                    return Ok(());
+                }
             }
 
             info!(
