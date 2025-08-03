@@ -2,6 +2,7 @@ use std::{
     fs,
     io::{self, Write},
     path::{Path, PathBuf},
+    process::Command,
 };
 
 use anyhow::{Result, anyhow};
@@ -32,6 +33,11 @@ impl PublishArgs {
     pub fn run(&self) -> Result<()> {
         let working_directory = std::env::current_dir()?;
         info!("Working directory: {}", working_directory.display());
+
+        if let Some(sln) = find_sln_file(&working_directory)? {
+            info!("Found solution file, executing build: {}", sln.display());
+            execute_dotnet_build(&sln)?;
+        }
 
         let config_path = working_directory.join(PUBLISH_CONFIG_FILE_NAME);
         let mut config = if config_path.exists() {
@@ -177,4 +183,45 @@ fn confirm_deletion(target_dir: &Path) -> Result<bool> {
 
     let input = input.trim().to_lowercase();
     Ok(input == "y" || input == "yes")
+}
+
+fn find_sln_file(working_directory: &Path) -> Result<Option<PathBuf>> {
+    let entries = fs::read_dir(working_directory)?;
+
+    for entry in entries {
+        let entry = entry?;
+        let path = entry.path();
+
+        if path.is_file() {
+            if let Some(extension) = path.extension() {
+                if extension == "sln" {
+                    return Ok(Some(path));
+                }
+            }
+        }
+    }
+
+    Ok(None)
+}
+
+fn execute_dotnet_build(sln_file: &Path) -> Result<()> {
+    let output = Command::new("dotnet")
+        .arg("build")
+        .arg(sln_file)
+        .arg("--configuration")
+        .arg("Release")
+        .current_dir(sln_file.parent().unwrap_or(sln_file))
+        .output()
+        .map_err(|e| anyhow!("Failed to execute dotnet build: {}", e))?;
+
+    if output.status.success() {
+        info!("dotnet build completed successfully");
+        debug!("Build output: {}", String::from_utf8_lossy(&output.stdout));
+    } else {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        warn!("dotnet build failed: {}", stderr);
+        return Err(anyhow!("dotnet build failed: {}", stderr));
+    }
+
+    Ok(())
 }
