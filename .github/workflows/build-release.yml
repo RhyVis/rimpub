@@ -1,0 +1,193 @@
+name: Build and Release
+
+on:
+  push:
+    branches: [main]
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        include:
+          - target: x86_64-pc-windows-msvc
+            os: windows-latest
+            binary_name: rimpub.exe
+            artifact_name: rimpub-windows-x64
+          - target: x86_64-unknown-linux-gnu
+            os: ubuntu-latest
+            binary_name: rimpub
+            artifact_name: rimpub-linux-x64
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/registry
+          key: ${{ runner.os }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Cache cargo index
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/git
+          key: ${{ runner.os }}-cargo-index-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Cache cargo build
+        uses: actions/cache@v4
+        with:
+          path: target
+          key: ${{ runner.os }}-cargo-build-target-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Build release
+        run: cargo build --release --target ${{ matrix.target }}
+
+      - name: Create artifact directory
+        run: mkdir -p artifacts
+
+      - name: Copy binary (Windows)
+        if: matrix.os == 'windows-latest'
+        run: copy target\${{ matrix.target }}\release\${{ matrix.binary_name }} artifacts\
+        shell: cmd
+
+      - name: Copy binary (Linux)
+        if: matrix.os == 'ubuntu-latest'
+        run: cp target/${{ matrix.target }}/release/${{ matrix.binary_name }} artifacts/
+
+      - name: Generate SHA256 checksum (Windows)
+        if: matrix.os == 'windows-latest'
+        run: |
+          cd artifacts
+          certutil -hashfile ${{ matrix.binary_name }} SHA256 > ${{ matrix.binary_name }}.sha256
+        shell: cmd
+
+      - name: Generate SHA256 checksum (Linux)
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          cd artifacts
+          sha256sum ${{ matrix.binary_name }} > ${{ matrix.binary_name }}.sha256
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact_name }}
+          path: artifacts/
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Get version from Cargo.toml
+        id: get_version
+        run: |
+          VERSION=$(grep '^version = ' Cargo.toml | head -1 | sed 's/version = "\(.*\)"/\1/')
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "tag=v$VERSION" >> $GITHUB_OUTPUT
+
+      - name: Check if tag already exists
+        id: check_tag
+        run: |
+          if git rev-parse "v${{ steps.get_version.outputs.version }}" >/dev/null 2>&1; then
+            echo "exists=true" >> $GITHUB_OUTPUT
+          else
+            echo "exists=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Download all artifacts
+        if: steps.check_tag.outputs.exists == 'false'
+        uses: actions/download-artifact@v4
+
+      - name: Create zip archives
+        if: steps.check_tag.outputs.exists == 'false'
+        run: |
+          # Create Windows archive
+          cd rimpub-windows-x64
+          zip -r ../rimpub-windows-x64-${{ steps.get_version.outputs.version }}.zip .
+          cd ..
+
+          # Create Linux archive
+          cd rimpub-linux-x64
+          tar -czf ../rimpub-linux-x64-${{ steps.get_version.outputs.version }}.tar.gz .
+          cd ..
+
+          # Create combined SHA256 checksums file
+          echo "# SHA256 Checksums for rimpub v${{ steps.get_version.outputs.version }}" > checksums.txt
+          echo "" >> checksums.txt
+          echo "## Windows x64:" >> checksums.txt
+          cat rimpub-windows-x64/*.sha256 | sed 's/^/  /' >> checksums.txt
+          echo "" >> checksums.txt
+          echo "## Linux x64:" >> checksums.txt
+          cat rimpub-linux-x64/*.sha256 | sed 's/^/  /' >> checksums.txt
+
+      - name: Create Release
+        if: steps.check_tag.outputs.exists == 'false'
+        id: create_release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ steps.get_version.outputs.tag }}
+          release_name: Release ${{ steps.get_version.outputs.tag }}
+          body: |
+            ## Changes in this Release
+
+            - Auto-generated release for version ${{ steps.get_version.outputs.version }}
+
+            ## Downloads
+
+            - **Windows (x64)**: rimpub-windows-x64-${{ steps.get_version.outputs.version }}.zip
+            - **Linux (x64)**: rimpub-linux-x64-${{ steps.get_version.outputs.version }}.tar.gz
+            - **SHA256 Checksums**: checksums.txt
+
+            ## Verification
+
+            You can verify the integrity of downloaded files using the SHA256 checksums provided in the checksums.txt file.
+          draft: false
+          prerelease: false
+
+      - name: Upload Windows Release Asset
+        if: steps.check_tag.outputs.exists == 'false'
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: ./rimpub-windows-x64-${{ steps.get_version.outputs.version }}.zip
+          asset_name: rimpub-windows-x64-${{ steps.get_version.outputs.version }}.zip
+          asset_content_type: application/zip
+
+      - name: Upload Linux Release Asset
+        if: steps.check_tag.outputs.exists == 'false'
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: ./rimpub-linux-x64-${{ steps.get_version.outputs.version }}.tar.gz
+          asset_name: rimpub-linux-x64-${{ steps.get_version.outputs.version }}.tar.gz
+          asset_content_type: application/gzip
+
+      - name: Upload SHA256 Checksums
+        if: steps.check_tag.outputs.exists == 'false'
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: ./checksums.txt
+          asset_name: checksums.txt
+          asset_content_type: text/plain
