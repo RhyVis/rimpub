@@ -7,7 +7,7 @@ use std::{
 use anyhow::{Result, anyhow};
 use clap::Args;
 use ignore::{DirEntry, WalkBuilder};
-use log::{info, warn};
+use log::{debug, info, warn};
 use serde::{Deserialize, Serialize};
 
 use crate::cli::Config;
@@ -19,8 +19,8 @@ pub struct PublishArgs {
     pub target_dir: Option<String>,
 }
 
-const PUBLISH_CONFIG_FILE_NAME: &str = "rimpub.toml";
-const PUBLISH_IGNORE_FILE_NAME: &str = ".rimpub-ignore";
+pub const PUBLISH_CONFIG_FILE_NAME: &str = "rimpub.toml";
+pub const PUBLISH_IGNORE_FILE_NAME: &str = ".rimpub-ignore";
 
 #[derive(Debug, Serialize, Deserialize, Default)]
 pub struct PublishConf {
@@ -35,16 +35,19 @@ impl PublishArgs {
 
         let config_path = working_directory.join(PUBLISH_CONFIG_FILE_NAME);
         let mut config = if config_path.exists() {
+            debug!("Reading config file: {}", config_path.display());
             let config_contents = fs::read_to_string(config_path)?;
             toml::de::from_str(&config_contents).map_err(|e| {
                 warn!("Failed to parse {}: {}", PUBLISH_CONFIG_FILE_NAME, e);
                 anyhow!("Failed to parse {}: {}", PUBLISH_CONFIG_FILE_NAME, e)
             })?
         } else {
+            debug!("No config file found, using default configuration");
             PublishConf::default()
         };
 
         if config.name.is_empty() {
+            debug!("No 'name' provided in configuration, using folder name instead");
             config.name = working_directory
                 .file_name()
                 .map(|s| s.to_string_lossy().to_string())
@@ -149,14 +152,14 @@ fn copy_entry(entry: &DirEntry, source_root: &Path, target_root: &Path) -> Resul
     if entry.file_type().map_or(false, |ft| ft.is_dir()) {
         if !target_path.exists() {
             fs::create_dir_all(&target_path)?;
-            info!("Created directory: {}", relative_path.display());
+            debug!("Created directory: {}", relative_path.display());
         }
     } else if entry.file_type().map_or(false, |ft| ft.is_file()) {
         if let Some(parent) = target_path.parent() {
             fs::create_dir_all(parent)?;
         }
         fs::copy(source_path, &target_path)?;
-        info!("Copied file: {}", relative_path.display());
+        debug!("Copied file: {}", relative_path.display());
     }
 
     Ok(())
