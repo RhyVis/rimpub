@@ -171,7 +171,7 @@ fn execute_dotnet_build(sln_file: &Path) -> Result<()> {
 
     if output.status.success() {
         info!("Project build completed successfully");
-        debug!("Build output: {}", decode_out(&output.stdout));
+        debug!("Build output:\n{}", decode_out(&output.stdout));
     } else {
         let stderr = decode_out(&output.stderr);
         warn!("Project build failed: {}", stderr);

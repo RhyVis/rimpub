@@ -4,7 +4,7 @@ use std::{
 };
 
 use anyhow::{Result, anyhow};
-use log::warn;
+use log::{debug, warn};
 
 pub fn get_dir() -> PathBuf {
     dirs::home_dir()
@@ -21,6 +21,8 @@ pub fn read_steam_install_path() -> Result<Option<PathBuf>> {
         const STEAM_REG_PATH_32: &str = r"SOFTWARE\Valve\Steam";
 
         const KEY_INSTALL_DIR: &str = "InstallPath";
+
+        debug!("Reading Steam install path from registry");
 
         let hklm = RegKey::predef(HKEY_LOCAL_MACHINE);
         let steam_key = hklm
@@ -46,8 +48,6 @@ pub fn read_steam_install_path() -> Result<Option<PathBuf>> {
 
     #[cfg(not(target_os = "windows"))]
     {
-        use log::debug;
-
         debug!("Reading Steam install path is not supported on this OS");
         Ok(None)
     }
