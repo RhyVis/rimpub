@@ -1,6 +1,5 @@
 use std::{
     fs,
-    io::{self, Write},
     path::{Path, PathBuf},
     process::Command,
 };
@@ -11,7 +10,10 @@ use ignore::{DirEntry, WalkBuilder};
 use log::{debug, info, warn};
 use serde::{Deserialize, Serialize};
 
-use crate::cli::Config;
+use crate::{
+    cli::Config,
+    util::{confirm, decode_out},
+};
 
 #[derive(Debug, Args)]
 pub struct PublishArgs {
@@ -31,7 +33,7 @@ pub struct PublishConf {
 
 impl PublishArgs {
     pub fn run(&self) -> Result<()> {
-        let config_global = Config::get_obj();
+        let config_global = Config::get_clone();
         let working_directory = std::env::current_dir()?;
         info!("Working directory: {}", working_directory.display());
 
@@ -59,7 +61,7 @@ impl PublishArgs {
                 .file_name()
                 .map(|s| s.to_string_lossy().to_string())
                 .ok_or_else(|| {
-                    anyhow!("Didn't configure 'name' and failed to get directory name")
+                    anyhow!("Didn't configure 'name' and failed to get working directory name")
                 })?;
         }
 
@@ -69,7 +71,7 @@ impl PublishArgs {
             .target_dir
             .as_ref()
             .map(PathBuf::from)
-            .or_else(|| Config::get_obj().path_mods)
+            .or_else(|| Config::get_clone().path_mods)
             .ok_or_else(|| anyhow!("Cannot determine target directory from config or args"))?;
         let target_path = target_base.join(&config.name);
 
@@ -77,7 +79,10 @@ impl PublishArgs {
 
         if target_path.exists() {
             if !config_global.no_ask {
-                if !confirm_deletion(&target_path)? {
+                if !confirm(&format!(
+                    "Target directory '{}' already exists. Do you want to delete it and continue? (y/N): ",
+                    target_path.display()
+                )) {
                     info!("Operation cancelled by user");
                     return Ok(());
                 }
@@ -174,37 +179,11 @@ fn copy_entry(entry: &DirEntry, source_root: &Path, target_root: &Path) -> Resul
     Ok(())
 }
 
-fn confirm_deletion(target_dir: &Path) -> Result<bool> {
-    print!(
-        "Target directory '{}' already exists. Do you want to delete it and continue? (y/N): ",
-        target_dir.display()
-    );
-    io::stdout().flush()?;
-
-    let mut input = String::new();
-    io::stdin().read_line(&mut input)?;
-
-    let input = input.trim().to_lowercase();
-    Ok(input == "y" || input == "yes")
-}
-
 fn find_sln_file(working_directory: &Path) -> Result<Option<PathBuf>> {
-    let entries = fs::read_dir(working_directory)?;
-
-    for entry in entries {
-        let entry = entry?;
-        let path = entry.path();
-
-        if path.is_file() {
-            if let Some(extension) = path.extension() {
-                if extension == "sln" {
-                    return Ok(Some(path));
-                }
-            }
-        }
-    }
-
-    Ok(None)
+    Ok(fs::read_dir(working_directory)?
+        .filter_map(Result::ok)
+        .map(|entry| entry.path())
+        .find(|path| path.is_file() && path.extension().map_or(false, |ext| ext == "sln")))
 }
 
 fn execute_dotnet_build(sln_file: &Path) -> Result<()> {
@@ -215,15 +194,15 @@ fn execute_dotnet_build(sln_file: &Path) -> Result<()> {
         .arg("Release")
         .current_dir(sln_file.parent().unwrap_or(sln_file))
         .output()
-        .map_err(|e| anyhow!("Failed to execute dotnet build: {}", e))?;
+        .map_err(|e| anyhow!("Failed to execute dotnet build:\n{}", e))?;
 
     if output.status.success() {
-        info!("dotnet build completed successfully");
-        debug!("Build output: {}", String::from_utf8_lossy(&output.stdout));
+        info!("Project build completed successfully");
+        debug!("Build output: {}", decode_out(&output.stdout));
     } else {
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        warn!("dotnet build failed: {}", stderr);
-        return Err(anyhow!("dotnet build failed: {}", stderr));
+        let stderr = decode_out(&output.stderr);
+        warn!("Project build failed: {}", stderr);
+        return Err(anyhow!("Project build failed:\n{}", stderr));
     }
 
     Ok(())
