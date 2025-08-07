@@ -2,10 +2,11 @@ use anyhow::{Result, anyhow};
 use clap::{Parser, Subcommand};
 use log::warn;
 
-pub use self::{config::*, generate::*, publish::*};
+pub use self::{config::*, generate::*, project::*, publish::*};
 
 mod config;
 mod generate;
+mod project;
 mod publish;
 
 #[derive(Debug, Parser)]

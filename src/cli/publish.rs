@@ -8,10 +8,9 @@ use anyhow::{Result, anyhow};
 use clap::Args;
 use ignore::{DirEntry, WalkBuilder};
 use log::{debug, info, warn};
-use serde::{Deserialize, Serialize};
 
 use crate::{
-    cli::Config,
+    cli::{Config, PROJECT_CONFIG_FILE_NAME, ProjectConf},
     util::{confirm, decode_out},
 };
 
@@ -22,14 +21,7 @@ pub struct PublishArgs {
     pub target_dir: Option<String>,
 }
 
-pub const PUBLISH_CONFIG_FILE_NAME: &str = "rimpub.toml";
-pub const PUBLISH_IGNORE_FILE_NAME: &str = ".rimpub-ignore";
-
-#[derive(Debug, Serialize, Deserialize, Default)]
-pub struct PublishConf {
-    #[serde(default)]
-    pub name: String,
-}
+pub const PUBLISH_IGNORE_FILE_NAME: &str = ".rimpub.ignore";
 
 impl PublishArgs {
     pub fn run(&self) -> Result<()> {
@@ -42,28 +34,9 @@ impl PublishArgs {
             execute_dotnet_build(&sln)?;
         }
 
-        let config_path = working_directory.join(PUBLISH_CONFIG_FILE_NAME);
-        let mut config = if config_path.exists() {
-            debug!("Reading config file: {}", config_path.display());
-            let config_contents = fs::read_to_string(config_path)?;
-            toml::de::from_str(&config_contents).map_err(|e| {
-                warn!("Failed to parse {}: {}", PUBLISH_CONFIG_FILE_NAME, e);
-                anyhow!("Failed to parse {}: {}", PUBLISH_CONFIG_FILE_NAME, e)
-            })?
-        } else {
-            debug!("No config file found, using default configuration");
-            PublishConf::default()
-        };
-
-        if config.name.is_empty() {
-            debug!("No 'name' provided in configuration, using folder name instead");
-            config.name = working_directory
-                .file_name()
-                .map(|s| s.to_string_lossy().to_string())
-                .ok_or_else(|| {
-                    anyhow!("Didn't configure 'name' and failed to get working directory name")
-                })?;
-        }
+        let (mut config, _) = ProjectConf::load_current()?;
+        config.resolve_name();
+        debug!("Loaded project configuration: {:?}", config);
 
         info!("Working project: {}", config.name);
 
@@ -71,7 +44,7 @@ impl PublishArgs {
             .target_dir
             .as_ref()
             .map(PathBuf::from)
-            .or_else(|| Config::get_clone().path_mods)
+            .or_else(|| config_global.get_path_mods().ok().flatten())
             .ok_or_else(|| anyhow!("Cannot determine target directory from config or args"))?;
         let target_path = target_base.join(&config.name);
 
@@ -118,7 +91,7 @@ impl PublishArgs {
                 if name == ".gitignore"
                     || name == ".git"
                     || name == PUBLISH_IGNORE_FILE_NAME
-                    || name == PUBLISH_CONFIG_FILE_NAME
+                    || name == PROJECT_CONFIG_FILE_NAME
                 {
                     false
                 } else {

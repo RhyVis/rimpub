@@ -1,5 +1,5 @@
 /target
-rimpub.toml
-.rimpub-ignore
+.rimpub.toml
+.rimpub.ignore
 /build.ps1
 /.cargo

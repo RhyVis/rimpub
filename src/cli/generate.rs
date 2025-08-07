@@ -4,7 +4,7 @@ use anyhow::Result;
 use clap::{Args, Subcommand};
 use log::{debug, info, warn};
 
-use super::{PUBLISH_CONFIG_FILE_NAME, PUBLISH_IGNORE_FILE_NAME, PublishConf};
+use super::{PROJECT_CONFIG_FILE_NAME, PUBLISH_IGNORE_FILE_NAME, ProjectConf};
 
 #[derive(Debug, Args)]
 pub struct GenerateArgs {
@@ -38,7 +38,7 @@ impl GenerateCommand {
 }
 
 fn gen_config_file(working_dir: &Path) -> Result<()> {
-    let config_path = working_dir.join(PUBLISH_CONFIG_FILE_NAME);
+    let config_path = working_dir.join(PROJECT_CONFIG_FILE_NAME);
     if config_path.exists() {
         warn!(
             "Configuration file already exists at {}",
@@ -49,7 +49,7 @@ fn gen_config_file(working_dir: &Path) -> Result<()> {
     debug!("Generating configuration file at {}", config_path.display());
     fs::write(
         config_path,
-        toml::to_string_pretty(&PublishConf::default())?,
+        toml::to_string_pretty(&ProjectConf::default())?,
     )?;
     Ok(())
 }

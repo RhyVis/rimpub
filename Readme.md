@@ -8,7 +8,7 @@ Refer to `rimpub --help` for more info.
 
 ## Start
 
-- (Not on Windows, where I use reg to auto-detect) Using `rimpub config set path_mods '...'` to your RimWorld local mods directory (or using `--target-dir`).
+- (Not on Windows, where I use reg to auto-detect Steam) Using `rimpub config set path_mods '...'` to your RimWorld local mods directory (or using `--target-dir`).
 - Run `rimpub generate ignore-file` in develop directory, then add things in the file just like .gitignore syntax.
 - Run `rimpub publish`, then files will automatically be copied to local mods directory, with ignored files stripped.
 
@@ -23,4 +23,3 @@ By default, `.git`, `.gitignore` and everything listed in `.gitignore` will be a
 
 - Generating project file structure.
 - Managing `About.xml`, `LoadFolders.xml`, etc.
-- More complex packaging like AssetBundle.

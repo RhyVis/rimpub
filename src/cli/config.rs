@@ -46,7 +46,7 @@ pub struct ConfigSetArgs {
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct Config {
     #[serde(default)]
-    pub path_mods: Option<PathBuf>,
+    pub path_game: Option<PathBuf>,
 
     #[serde(default)]
     pub no_ask: bool,
@@ -55,7 +55,7 @@ pub struct Config {
 static CONFIG: OnceLock<RwLock<Config>> = OnceLock::new();
 
 const CONFIG_FILE_NAME: &str = "Config.toml";
-const FIELD_PATH_MODS: &str = "path_mods";
+const FIELD_PATH_GAME: &str = "path_game";
 const FIELD_NO_ASK: &str = "no_ask";
 
 const PATH_SEG_RIMWORLD: &str = "steamapps/common/RimWorld";
@@ -75,12 +75,12 @@ impl Config {
         let config = CONFIG.get().expect("Config has not initialized");
         let config = config.read().expect("Config not readable");
         match key.to_lowercase().as_str() {
-            FIELD_PATH_MODS => config
-                .path_mods
+            FIELD_PATH_GAME => config
+                .path_game
                 .clone()
                 .map(|p| p.to_string_lossy().to_string())
                 .or_else(|| {
-                    warn!("'path_mods' not set");
+                    warn!("'{FIELD_PATH_GAME}' not set");
                     None
                 }),
             FIELD_NO_ASK => Some(config.no_ask.to_string()),
@@ -97,25 +97,27 @@ impl Config {
         config.clone()
     }
 
+    pub fn get_path_mods(&self) -> Result<Option<PathBuf>> {
+        Ok(self.path_game.clone().map(|p| p.join(PATH_SEG_MODS)))
+    }
+
     pub fn set(key: &str, value: &str) -> Result<()> {
         match key.to_lowercase().as_str() {
-            FIELD_PATH_MODS => Self::write(|c| {
+            FIELD_PATH_GAME => Self::write(|c| {
                 let value = PathBuf::from(value.trim());
-                c.path_mods = Some(value);
-                info!(
-                    "Set 'path_mods' to {}",
-                    c.path_mods.as_ref().unwrap().display()
-                );
+                info!("Set '{}' to {}", FIELD_PATH_GAME, value.display());
+                c.path_game = Some(value);
                 Ok(())
             }),
             FIELD_NO_ASK => Self::write(|c| {
                 c.no_ask = value.parse().map_err(|_| {
                     anyhow!(
-                        "Invalid value for 'no_ask': expected a boolean, got '{}'",
+                        "Invalid value for '{}': expected a boolean, got '{}'",
+                        FIELD_NO_ASK,
                         value
                     )
                 })?;
-                info!("Set 'no_ask' to {}", c.no_ask);
+                info!("Set '{}' to {}", FIELD_NO_ASK, c.no_ask);
                 Ok(())
             }),
             _ => {
@@ -152,20 +154,19 @@ impl Config {
     fn default_make() -> Result<Self> {
         info!("Creating default config file");
         let mut default = Self::default();
-        default.path_mods = read_steam_install_path()
+        default.path_game = read_steam_install_path()
             .unwrap_or_else(|_| {
                 warn!("Failed to read Steam install path, 'path_mods' will not be set");
                 None
             })
             .and_then(|path| {
                 path.join(PATH_SEG_RIMWORLD)
-                    .join(PATH_SEG_MODS)
                     .canonicalize()
-                    .inspect_err(|e| warn!("Failed to canonicalize 'path_mods': {}", e))
+                    .inspect_err(|e| warn!("Failed to canonicalize '{}': {}", FIELD_PATH_GAME, e))
                     .ok()
             });
-        if let Some(path) = &default.path_mods {
-            debug!("Default 'path_mods' set to {}", path.display());
+        if let Some(path) = &default.path_game {
+            debug!("Default '{}' set to {}", FIELD_PATH_GAME, path.display());
         }
         default.save(true)?;
         Ok(default)
@@ -219,7 +220,7 @@ impl ConfigArgs {
             ConfigCommand::Check => {
                 let mut any_err = false;
                 let config = Config::get_clone();
-                let path_mods = config.path_mods;
+                let path_mods = config.path_game;
                 if let Some(path_mods) = path_mods {
                     if !fs::exists(Path::new(&path_mods)).map_err(|e| {
                         anyhow!(
